@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TransEditor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 h-screen overflow-hidden flex">
+    <aside class="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
+        <div class="p-4 border-b border-gray-200 bg-gray-50">
+            <h1 class="text-xl font-bold text-indigo-600 flex items-center gap-2">
+                <i data-lucide="book-open" class="w-6 h-6"></i> TransEditor
+            </h1>
+        </div>
+        
+        <div id="page-list" class="flex-1 overflow-y-auto p-2">
+        </div>
+
+        <div class="p-3 border-t border-gray-200">
+            <button onclick="app.addNewPage()" class="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 py-2 rounded-md hover:bg-gray-50 transition-colors text-sm">
+                <i data-lucide="plus" class="w-4 h-4"></i> 새 페이지
+            </button>
+        </div>
+    </aside>
+    <main class="flex-1 flex flex-col h-full overflow-hidden">
+        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <input type="text" id="page-title-input" class="text-lg font-semibold bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none px-1" value="Page 1">
+                <span class="text-sm text-gray-400">| 문장 수: <span id="segment-count">0</span></span>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer mr-2 select-none">
+                    <input type="checkbox" id="include-page-numbers" checked class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500">
+                    페이지 제목 포함
+                </label>
+
+                <button onclick="app.openModal('draft-modal')" class="flex items-center gap-2 px-3 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-md hover:bg-indigo-50 text-sm font-medium transition-colors">
+                    <i data-lucide="clipboard-list" class="w-4 h-4"></i> 초벌 번역 입력
+                </button>
+
+                <button onclick="app.openModal('import-modal')" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm text-sm font-medium transition-colors">
+                    <i data-lucide="file-text" class="w-4 h-4"></i> 텍스트 붙여넣기
+                </button>
+
+                <button onclick="app.exportText()" class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 shadow-sm text-sm font-medium transition-colors">
+                    <i data-lucide="download" class="w-4 h-4"></i> 결과 저장
+                </button>
+            </div>
+        </header>
+
+        <div id="editor-container" class="flex-1 overflow-y-auto p-6 bg-gray-100">
+            <div id="segments-list" class="max-w-4xl mx-auto space-y-4 pb-20">
+            </div>
+        </div>
+    </main>
+
+    <div id="import-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 flex">
+        <div class="bg-white rounded-lg w-[600px] shadow-xl p-6 flex flex-col max-h-[90vh]">
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                <i data-lucide="file-text" class="text-indigo-600"></i> 텍스트 가져오기
+            </h2>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">문장 분리 기호 (Space로 구분)</label>
+                <input type="text" id="delimiters-input" value=". ? ! 。 ！ ？" class="w-full p-2 border border-gray-300 rounded text-sm focus:border-indigo-500 outline-none">
+                <p class="text-xs text-gray-500 mt-1">* 대화문(「...」, “...”)이 분리 기호로 끝나는 경우에도 문장이 나뉩니다.</p>
+            </div>
+            <textarea id="import-textarea" class="flex-1 w-full p-4 border border-gray-300 rounded-md resize-none mb-4 focus:border-indigo-500 outline-none h-64" placeholder="번역할 원본 텍스트를 여기에 붙여넣으세요..."></textarea>
+            <div class="flex justify-end gap-3">
+                <button onclick="app.closeModal('import-modal')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">취소</button>
+                <button onclick="app.handleImport()" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">분석 및 가져오기</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="draft-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 flex">
+        <div class="bg-white rounded-lg w-[600px] shadow-xl p-6 flex flex-col max-h-[90vh]">
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                <i data-lucide="clipboard-list" class="text-orange-500"></i> 초벌 번역 입력
+            </h2>
+            <p class="text-sm text-gray-600 mb-4 bg-gray-50 p-3 rounded">
+                준비된 초벌 번역 텍스트를 붙여넣으세요.<br/>
+                설정된 기호를 기준으로 문장을 잘라 <strong>현재 페이지의 원본 문장 순서대로</strong> 매칭합니다.
+            </p>
+            <textarea id="draft-textarea" class="flex-1 w-full p-4 border border-gray-300 rounded-md resize-none mb-4 focus:border-orange-500 outline-none h-64" placeholder="초벌 번역 텍스트를 여기에 붙여넣으세요..."></textarea>
+            <div class="flex justify-end gap-3">
+                <button onclick="app.closeModal('draft-modal')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">취소</button>
+                <button onclick="app.handleDraftImport()" class="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600">적용하기</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[100] flex">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-[400px]">
+            <div class="flex items-center gap-3 mb-4 text-red-600">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                <h3 class="text-lg font-bold">확인 필요</h3>
+            </div>
+            <p id="confirm-message" class="text-gray-600 mb-6">정말 삭제하시겠습니까?</p>
+            <div class="flex justify-end gap-3">
+                <button onclick="app.closeConfirm()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">취소</button>
+                <button id="confirm-action-btn" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-sm">삭제하기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const generateId = () => {
+            return typeof crypto !== 'undefined' && crypto.randomUUID 
+                ? crypto.randomUUID() 
+                : Date.now().toString(36) + Math.random().toString(36).substr(2);
+        };
+
+        const state = {
+            pages: [{ id: 1, title: 'Page 1', segments: [] }],
+            activePageId: 1,
+            confirmCallback: null
+        };
+
+        const segmentText = (text, delimiters) => {
+            const segments = [];
+            let current = '';
+            let quoteStack = []; 
+            const quotePairs = { '"': '"', "'": "'", '“': '”', '‘': '’', '『': '』', '「': '」', '(': ')', '[': ']' };
+            const openQuotes = Object.keys(quotePairs);
+            const closeQuotes = Object.values(quotePairs);
+
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                current += char;
+
+                let justClosedQuote = false;
+
+                if (openQuotes.includes(char)) {
+                    if (quoteStack.length > 0 && quotePairs[quoteStack[quoteStack.length - 1]] === char) {
+                        quoteStack.pop();
+                        justClosedQuote = true;
+                    } else {
+                        quoteStack.push(char);
+                    }
+                } else if (closeQuotes.includes(char)) {
+                    if (quoteStack.length > 0 && quotePairs[quoteStack[quoteStack.length - 1]] === char) {
+                        quoteStack.pop();
+                        justClosedQuote = true;
+                    }
+                }
+
+                if (quoteStack.length === 0 && delimiters.includes(char)) {
+                    segments.push(current.trim());
+                    current = '';
+                } 
+
+                else if (justClosedQuote && quoteStack.length === 0) {
+                    const prevChar = text[i-1];
+                    if (delimiters.includes(prevChar)) {
+                        segments.push(current.trim());
+                        current = '';
+                    }
+                }
+            }
+            if (current.trim()) segments.push(current.trim());
+            return segments.filter(s => s.length > 0);
+        };
+
+        class App {
+            constructor() {
+                this.init();
+            }
+
+            init() {
+                document.querySelectorAll('.fixed').forEach(el => el.classList.add('hidden'));
+                this.render();
+                
+                document.getElementById('page-title-input').addEventListener('input', (e) => {
+                    const page = this.getActivePage();
+                    if(page) {
+                        page.title = e.target.value;
+                        this.renderSidebar();
+                    }
+                });
+            }
+
+            getActivePage() {
+                return state.pages.find(p => p.id === state.activePageId) || state.pages[0];
+            }
+
+            getDelimiters() {
+                return document.getElementById('delimiters-input').value.split(' ');
+            }
+
+            render() {
+                this.renderSidebar();
+                this.renderMainContent();
+                lucide.createIcons();
+            }
+
+            renderSidebar() {
+                const list = document.getElementById('page-list');
+                list.innerHTML = '';
+
+                state.pages.forEach(page => {
+                    const isActive = page.id === state.activePageId;
+                    const div = document.createElement('div');
+                    div.className = `flex items-center justify-between p-2 rounded-md cursor-pointer mb-1 transition-colors ${isActive ? 'bg-indigo-50 text-indigo-700 font-medium' : 'hover:bg-gray-100 text-gray-600'}`;
+                    div.onclick = () => { state.activePageId = page.id; this.render(); };
+                    
+                    div.innerHTML = `
+                        <span class="truncate">${page.title}</span>
+                        ${state.pages.length > 1 ? `
+                            <button onclick="event.stopPropagation(); app.confirmDeletePage(${page.id})" class="text-gray-400 hover:text-red-500 p-1" title="페이지 삭제">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        ` : ''}
+                    `;
+                    list.appendChild(div);
+                });
+                lucide.createIcons();
+            }
+
+            renderMainContent() {
+                const page = this.getActivePage();
+                document.getElementById('page-title-input').value = page.title;
+                document.getElementById('segment-count').innerText = page.segments.length;
+
+                const container = document.getElementById('segments-list');
+                container.innerHTML = '';
+
+                if (page.segments.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-20 text-gray-400 border-2 border-dashed border-gray-300 rounded-lg">
+                            <p class="text-lg">번역할 텍스트가 없습니다.</p>
+                            <p class="text-sm mt-2">상단의 '텍스트 붙여넣기'를 눌러 시작하세요.</p>
+                            <div onclick="app.addEmptySegment()" class="mt-4 cursor-pointer inline-flex items-center gap-2 text-indigo-500 font-medium hover:underline">
+                                <i data-lucide="plus" class="w-4 h-4"></i> 빈 문장 추가하기
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                page.segments.forEach((seg, index) => {
+                    const card = document.createElement('div');
+                    card.className = "bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden group hover:shadow-md transition-shadow";
+                    card.innerHTML = `
+                        <div class="bg-gray-50 border-b border-gray-100 p-3 relative">
+                            <div class="text-xs font-bold text-gray-400 mb-1 flex justify-between items-center">
+                                <span>ORIGINAL #${index + 1}</span>
+                                <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button title="아래 문장과 병합" onclick="app.mergeDown(${index})" class="p-1 hover:bg-gray-200 rounded text-gray-500">
+                                        <i data-lucide="merge" class="w-3.5 h-3.5 rotate-90"></i>
+                                    </button>
+                                    <button title="이 문장 삭제" onclick="app.confirmDeleteSegment(${index})" class="p-1 hover:bg-red-100 rounded text-red-500">
+                                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <textarea id="source-${seg.id}" class="w-full bg-transparent border-none resize-none focus:ring-0 text-gray-700 leading-relaxed p-0 text-base min-h-[1.5em]" 
+                                    rows="${Math.max(1, Math.ceil(seg.source.length / 60))}" placeholder="원본 텍스트">${seg.source}</textarea>
+                                <button title="커서 위치에서 자르기" onclick="app.splitAtCursor('${seg.id}', ${index})" class="self-start mt-1 p-1 bg-white border border-gray-300 rounded shadow-sm text-indigo-600 hover:bg-indigo-50 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                    <i data-lucide="scissors" class="w-3 h-3"></i> 자르기
+                                </button>
+                            </div>
+                        </div>
+
+                        ${seg.draftTranslation ? `
+                        <div class="bg-orange-50/50 px-3 py-2 border-b border-orange-100 flex items-start gap-2 group/draft">
+                            <div class="flex-1 text-sm text-gray-700 leading-relaxed">
+                                <span class="text-[10px] font-bold text-orange-400 block mb-0.5">DRAFT</span>
+                                ${seg.draftTranslation}
+                            </div>
+                            <button onclick="app.applyDraft(${index})" class="mt-1 p-1.5 bg-white border border-orange-200 rounded-md text-orange-600 hover:bg-orange-100 hover:text-orange-700 transition-colors shadow-sm" title="적용하기">
+                                <i data-lucide="arrow-down-circle" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        ` : ''}
+                        <div class="p-3 bg-white">
+                            <div class="text-xs font-bold text-indigo-400 mb-1">TRANSLATION</div>
+                            <textarea id="target-${seg.id}" class="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-y min-h-[60px] text-gray-900 leading-relaxed" 
+                                placeholder="여기에 번역을 입력하세요...">${seg.target}</textarea>
+                        </div>
+                    `;
+                    container.appendChild(card);
+
+                    const sourceArea = document.getElementById(`source-${seg.id}`);
+                    const targetArea = document.getElementById(`target-${seg.id}`);
+                    
+                    sourceArea.addEventListener('input', (e) => { seg.source = e.target.value; });
+                    targetArea.addEventListener('input', (e) => { seg.target = e.target.value; });
+                });
+
+                const addBtn = document.createElement('div');
+                addBtn.className = "h-10 flex justify-center opacity-50 hover:opacity-100 transition-opacity cursor-pointer border-2 border-dashed border-gray-300 rounded-lg items-center text-gray-400";
+                addBtn.innerHTML = `<i data-lucide="plus" class="w-5 h-5 mr-2"></i> 빈 문장 추가하기`;
+                addBtn.onclick = () => this.addEmptySegment();
+                container.appendChild(addBtn);
+            }
+
+            addNewPage() {
+                const newId = state.pages.length > 0 ? Math.max(...state.pages.map(p => p.id)) + 1 : 1;
+                state.pages.push({ id: newId, title: `Page ${newId}`, segments: [] });
+                state.activePageId = newId;
+                this.render();
+            }
+
+            addEmptySegment() {
+                this.getActivePage().segments.push({ id: generateId(), source: '새로운 문장', target: '', draftTranslation: '' });
+                this.renderMainContent();
+                lucide.createIcons();
+            }
+
+            handleImport() {
+                const text = document.getElementById('import-textarea').value.replace(/[\r\n]+/g, ' ');
+                if (!text.trim()) return;
+
+                const newSegs = segmentText(text, this.getDelimiters()).map(t => ({
+                    id: generateId(),
+                    source: t,
+                    target: '',
+                    draftTranslation: ''
+                }));
+
+                this.getActivePage().segments.push(...newSegs);
+                document.getElementById('import-textarea').value = '';
+                this.closeModal('import-modal');
+                this.render();
+            }
+
+            handleDraftImport() {
+                const text = document.getElementById('draft-textarea').value.replace(/[\r\n]+/g, ' ');
+                const drafts = segmentText(text, this.getDelimiters());
+                const page = this.getActivePage();
+
+                page.segments.forEach((seg, idx) => {
+                    if (drafts[idx]) seg.draftTranslation = drafts[idx];
+                });
+
+                document.getElementById('draft-textarea').value = '';
+                this.closeModal('draft-modal');
+                this.render();
+            }
+
+            mergeDown(index) {
+                const page = this.getActivePage();
+                if (!page.segments[index + 1]) return;
+                
+                const curr = page.segments[index];
+                const next = page.segments[index + 1];
+
+                curr.source += ' ' + next.source;
+                curr.target += (curr.target && next.target ? ' ' : '') + next.target;
+                curr.draftTranslation = (curr.draftTranslation || '') + ' ' + (next.draftTranslation || '');
+                
+                page.segments.splice(index + 1, 1);
+                this.renderMainContent();
+                lucide.createIcons();
+            }
+
+            splitAtCursor(segId, index) {
+                const textarea = document.getElementById(`source-${segId}`);
+                const cursor = textarea.selectionStart;
+                const page = this.getActivePage();
+                const segment = page.segments[index];
+                
+                if (cursor === 0 || cursor >= segment.source.length) return;
+
+                const part1 = segment.source.substring(0, cursor).trim();
+                const part2 = segment.source.substring(cursor).trim();
+
+                const newSeg1 = { ...segment, source: part1, id: generateId() };
+                const newSeg2 = { ...segment, source: part2, target: '', draftTranslation: '', id: generateId() };
+
+                page.segments.splice(index, 1, newSeg1, newSeg2);
+                this.renderMainContent();
+                lucide.createIcons();
+            }
+
+            applyDraft(index) {
+                const page = this.getActivePage();
+                page.segments[index].target = page.segments[index].draftTranslation;
+                this.renderMainContent();
+                lucide.createIcons();
+            }
+
+            exportText() {
+                let fullText = "";
+                const includeTitle = document.getElementById('include-page-numbers').checked;
+
+                state.pages.forEach(page => {
+                    if (includeTitle) fullText += `\n[${page.title}]\n`;
+                    page.segments.forEach(seg => {
+                        if (seg.target.trim()) fullText += seg.target.trim() + " ";
+                    });
+                    fullText += "\n";
+                });
+
+                const blob = new Blob([fullText], { type: 'text/plain' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'translated_output.txt';
+                a.click();
+            }
+
+            openModal(id) {
+                document.getElementById(id).classList.remove('hidden');
+                document.getElementById(id).classList.add('flex');
+            }
+
+            closeModal(id) {
+                document.getElementById(id).classList.add('hidden');
+                document.getElementById(id).classList.remove('flex');
+            }
+
+            openConfirm(msg, callback) {
+                document.getElementById('confirm-message').innerText = msg;
+                state.confirmCallback = callback;
+                this.openModal('confirm-modal');
+            }
+
+            closeConfirm() {
+                state.confirmCallback = null;
+                this.closeModal('confirm-modal');
+            }
+
+            confirmDeletePage(pageId) {
+                if (state.pages.length <= 1) {
+                    alert("최소 하나의 페이지는 있어야 합니다.");
+                    return;
+                }
+                this.openConfirm("페이지를 삭제하시겠습니까? 포함된 모든 문장이 사라집니다.", () => {
+                    state.pages = state.pages.filter(p => p.id !== pageId);
+                    if (state.activePageId === pageId) state.activePageId = state.pages[0].id;
+                    this.render();
+                });
+            }
+
+            confirmDeleteSegment(index) {
+                this.openConfirm("이 문장을 정말 삭제하시겠습니까?", () => {
+                    this.getActivePage().segments.splice(index, 1);
+                    this.renderMainContent();
+                    lucide.createIcons();
+                });
+            }
+        }
+
+        const app = new App();
+
+        document.getElementById('confirm-action-btn').onclick = () => {
+            if (state.confirmCallback) state.confirmCallback();
+            app.closeConfirm();
+        };
+
+        document.querySelectorAll('.fixed').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) app.closeModal(modal.id);
+            });
+        });
+    </script>
+</body>
+</html>
